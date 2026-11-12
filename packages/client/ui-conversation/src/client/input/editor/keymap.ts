@@ -32,6 +32,14 @@ export interface ComposerKeymapHandlers {
   arbitrate(key: ArbitrateKey, composing: boolean): ArbitrateOutcome
   /** Space adjudication; true = a claim was applied — the keystroke is consumed. */
   space(): boolean
+  /**
+   * Composer-owned handling for an arrow that menu arbitration passed:
+   * plugin key handlers, then submitted-prompt recall.
+   * @param key - the arrow that arrived.
+   * @param event - originating DOM event, when the engine supplied one.
+   * @returns true = the keystroke is consumed.
+   */
+  key(key: 'up' | 'down', event: KeyboardEvent | null): boolean
   /** Dismiss the popupSelect shell (Escape layering: an open overlay closes first). */
   dismissPopup(): void
   /** Whether Enter may submit right now (locked/busy states refuse). */
@@ -199,6 +207,11 @@ export function registerComposerKeymap(editor: LexicalEditor, handlers: Composer
   const arrow = (key: ArbitrateKey) => (event: KeyboardEvent | null): boolean => {
     const inComposition = event !== null && isComposingEvent(event, recentlyComposing)
     if (handlers.arbitrate(key, inComposition) !== 'pass') {
+      event?.preventDefault()
+      return true
+    }
+    // An IME owns the arrow while composing; recall never competes with it.
+    if (!inComposition && (key === 'up' || key === 'down') && handlers.key(key, event)) {
       event?.preventDefault()
       return true
     }

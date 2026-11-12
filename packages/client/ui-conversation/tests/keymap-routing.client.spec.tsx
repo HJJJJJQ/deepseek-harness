@@ -23,7 +23,7 @@ describe('keymap keydown routing', () => {
     })
     editor.setRootElement(first)
     const unregister = registerComposerKeymap(editor, {
-      arbitrate: () => 'pass', space: () => false, dismissPopup: () => {},
+      arbitrate: () => 'pass', space: () => false, key: () => false, dismissPopup: () => {},
       canSubmit: () => false, submit: () => {}, intakeFiles: () => {}, pasteText: () => {},
     })
     onTestFinished(unregister)
@@ -55,6 +55,7 @@ describe('keymap keydown routing', () => {
     registerComposerKeymap(editor, {
       arbitrate: () => 'pass',
       space: () => false,
+      key: () => false,
       dismissPopup: () => {},
       canSubmit: () => true,
       submit,
@@ -65,6 +66,35 @@ describe('keymap keydown routing', () => {
     expect(submit).toHaveBeenCalledWith(false)
     fireEvent.keyDown(root, { key: 'Enter', metaKey: true })
     expect(submit).toHaveBeenCalledWith(true)
+  })
+
+  it('routes arrows through the composer key hook until it consumes them', () => {
+    const editor = createEditor({ namespace: 'arrow-routing', onError: (e) => { throw e } })
+    const root = document.createElement('div')
+    root.contentEditable = 'true'
+    document.body.appendChild(root)
+    onTestFinished(() => { editor.setRootElement(null); root.remove() })
+    editor.setRootElement(root)
+    registerPlainText(editor)
+    const key = vi.fn((_key: 'up' | 'down') => false)
+    registerComposerKeymap(editor, {
+      arbitrate: () => 'pass',
+      space: () => false,
+      key,
+      dismissPopup: () => {},
+      canSubmit: () => true,
+      submit: () => {},
+      intakeFiles: () => {},
+      pasteText: () => {},
+    })
+    fireEvent.keyDown(root, { key: 'ArrowUp' })
+    expect(key).toHaveBeenLastCalledWith('up', expect.anything())
+    fireEvent.keyDown(root, { key: 'ArrowDown' })
+    expect(key).toHaveBeenLastCalledWith('down', expect.anything())
+    key.mockReturnValue(true)
+    const consume = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true })
+    root.dispatchEvent(consume)
+    expect(consume.defaultPrevented).toBe(true)
   })
 
   it.each([
@@ -86,7 +116,7 @@ describe('keymap keydown routing', () => {
     const submit = vi.fn()
     const arbitrate = vi.fn(() => 'pass' as const)
     onTestFinished(registerComposerKeymap(editor, {
-      arbitrate, space: () => false, dismissPopup: () => {}, canSubmit: () => true,
+      arbitrate, space: () => false, key: () => false, dismissPopup: () => {}, canSubmit: () => true,
       submit, intakeFiles: () => {}, pasteText: () => {},
     }))
     editor.update(() => {
@@ -123,6 +153,7 @@ describe('keymap keydown routing', () => {
     registerComposerKeymap(editor, {
       arbitrate,
       space: () => false,
+      key: () => false,
       dismissPopup: () => {},
       canSubmit: () => true,
       submit: () => {},

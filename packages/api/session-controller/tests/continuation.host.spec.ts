@@ -29,9 +29,29 @@ it.each(['AUTH', 'QUOTA', 'ACCOUNT_QUOTA', 'MISSING_CREDENTIAL', 'INVALID_CREDEN
 )
 it.each<TurnEndReason>([
   { kind: 'completed' }, { kind: 'max-tokens' }, { kind: 'blocked' },
-  { kind: 'interrupted' }, { kind: 'forked' }, { kind: 'aborted', reason: { kind: 'user' } },
+  { kind: 'interrupted' }, { kind: 'forked' },
 ])('leaves a $kind turn unchanged', (reason) => {
   expect(definition.wire.view(fold(events(reason)))).toBeNull()
+})
+
+it.each<TurnEndReason>([
+  { kind: 'aborted', reason: { kind: 'parent' } },
+  { kind: 'aborted', reason: { kind: 'hook', reason: 'stop-hook' } },
+  { kind: 'aborted', reason: { kind: 'disposed' } },
+  { kind: 'aborted', reason: { kind: 'legacy' } },
+])('leaves a $kind turn with a non-human cancellation unchanged', (reason) => {
+  expect(definition.wire.view(fold(events(reason)))).toBeNull()
+})
+
+it('offers a manual continuation after the human stops the turn', () => {
+  const stopped = events({ kind: 'aborted', reason: { kind: 'user' } })
+  expect(definition.wire.view(fold(stopped))).toBe(5)
+  // A stop that produced partial output settles as an interrupted assistant
+  // message rather than a failed attempt; the continuation still stands.
+  const partial = stopped.filter(event => event.type !== 'assistant/attempt')
+  expect(definition.wire.view(fold(partial))).toBe(5)
+  // The stop must belong to admitted human work.
+  expect(fold(stopped.filter(event => event.type !== 'user/message')).ending).toBeNull()
 })
 
 it('requires admitted human input and a failed settlement in the last step', () => {
@@ -111,7 +131,7 @@ it('publishes a complete-log result independently of the visible page and releas
   expect(ctx.sessionProjections.snapshot(session).values.conversationContinuation).toBe(ending)
   expect(changed.mock.calls.map(([, key, value]) => [key, value])).toEqual([['conversationContinuation', null], ['conversationContinuation', ending]])
   expect(ctx.sessionProjections.checkpoint(session).conversationContinuation)
-    .toEqual({ ver: 4, seq: ending, val: { admitted: false, failedAttempt: false, ending } })
+    .toEqual({ ver: 5, seq: ending, val: { admitted: false, failedAttempt: false, ending } })
   session.append('turn/start', { turn: 2 })
   expect(ctx.sessionProjections.snapshot(session).values.conversationContinuation).toBeNull()
   expect(changed).toHaveBeenCalledTimes(3)
@@ -127,12 +147,12 @@ it('restores valid, absent and outdated checkpoints through the registry', async
   await ctx.sessionProjections.register(definition)
   const session = ctx.sessions.create(SessionId('restored'))
   const log = events(failed('SERVER'))
-  const checkpoint = { conversationContinuation: { ver: 4, seq: SessionSeq(2), val: fold(log.slice(0, 3)) } }
+  const checkpoint = { conversationContinuation: { ver: 5, seq: SessionSeq(2), val: fold(log.slice(0, 3)) } }
   const restore = (rows: typeof checkpoint | Record<string, never>, tail: readonly SessionEvent[], base: number) =>
     ctx.sessionProjections.restore(rows, tail, SessionLogOffset(base), session.header, session.inheritedEventCount)
   expect(restore(checkpoint, log.slice(3), 3).snapshot.values.conversationContinuation).toBe(5)
   expect(restore({}, log, 0).snapshot.values.conversationContinuation).toBe(5)
-  const outdated = { conversationContinuation: { ...checkpoint.conversationContinuation, ver: 3 } }
+  const outdated = { conversationContinuation: { ...checkpoint.conversationContinuation, ver: 4 } }
   expect(restore(outdated, log, 0).snapshot.values.conversationContinuation).toBe(5)
   expect(() => restore(outdated, log.slice(3), 3)).toThrow('re-read from seq 0')
   expect(() => restore({}, log.slice(3), 3)).toThrow('re-read from seq 0')

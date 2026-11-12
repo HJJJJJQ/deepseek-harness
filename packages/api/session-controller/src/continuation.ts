@@ -1,7 +1,7 @@
 /** Constant-size continuation eligibility over the complete durable Session. */
 import type {} from './types.ts'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
-import type { SessionSeq } from '@deepseek-ai/dsh-session/types'
+import type { SessionSeq, TurnEndReason } from '@deepseek-ai/dsh-session/types'
 import { brandNumber } from '@deepseek-ai/dsh-brand'
 import { z } from 'zod'
 
@@ -22,10 +22,31 @@ export type ContinuationState = z.infer<typeof stateSchema>
 
 const EMPTY: ContinuationState = { admitted: false, failedAttempt: false, ending: null }
 
-/** Eligibility requires admitted human work and a failed settlement in the last request step. */
+/**
+ * Whether one settlement is worth offering a manual continuation for: a
+ * recoverable provider failure, or a turn the human stopped mid-flight. Only a
+ * user cancellation counts — parent, hook, disposal, and legacy closers are
+ * not the human asking to resume later.
+ */
+function continuableSettlement(reason: TurnEndReason, admitted: boolean, failedAttempt: boolean): boolean {
+  if (!admitted) return false
+  switch (reason.kind) {
+    case 'error':
+      return failedAttempt && CONTINUABLE_FAILURES.has(reason.error.code)
+    // A stop keeps whatever the turn had already produced (a partial assistant
+    // message, running tools), so the failed-attempt fact is not required:
+    // there is real work to carry on with.
+    case 'aborted':
+      return reason.reason.kind === 'user'
+    default:
+      return false
+  }
+}
+
+/** Eligibility requires admitted human work and a settlement a human may resume from. */
 export const continuationProjectionDefinition = {
   key: 'conversationContinuation',
-  stateVersion: 4,
+  stateVersion: 5,
   stateSchema,
   init: (): ContinuationState => EMPTY,
   apply: (state, event) => {
@@ -43,8 +64,8 @@ export const continuationProjectionDefinition = {
       case 'assistant/attempt':
         return state.failedAttempt ? state : { ...state, failedAttempt: true }
       case 'turn/end': {
-        const ending = event.data.reason.kind === 'error' && CONTINUABLE_FAILURES.has(event.data.reason.error.code)
-          && state.admitted && state.failedAttempt ? event.seq : null
+        const ending = continuableSettlement(event.data.reason, state.admitted, state.failedAttempt)
+          ? event.seq : null
         return ending === null ? EMPTY : { ...EMPTY, ending }
       }
       default:

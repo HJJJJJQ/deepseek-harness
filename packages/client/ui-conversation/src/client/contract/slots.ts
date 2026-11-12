@@ -17,6 +17,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { ComposerBlock } from './composer-blocks.ts'
+import type { ComposerPrimaryAction } from './composer-extensions.ts'
 import type { DraftAttachmentId, InputActions, InputNotice, InputState } from './input.ts'
 import type { ComposerKeyboard, DraftSnapshot, EditSelection } from './draft-editor.ts'
 import type { createConversationStore } from '../stores.ts'
@@ -620,6 +621,8 @@ export interface ComposerBarInjected {
     notices: ObservableSnapshot<InputNotice | null>
     lexicon: ObservableSnapshot<ReadonlyMap<'/' | '@', readonly string[]>>
     menuLauncher: ObservableSnapshot<string | null>
+    /** Live plugin-provided primary actions for an empty, idle composer. */
+    composerActions: ObservableSnapshot<readonly ComposerPrimaryAction[]>
   }
 }
 

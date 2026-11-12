@@ -29,6 +29,7 @@ import type {} from '@deepseek-ai/dsh-goal/client'
 // api-remotes import already places it in every client program.
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ComposerBarProps } from '../contract/slots.ts'
+import type { ComposerExtensionContext, ComposerPrimaryAction } from '../contract/composer-extensions.ts'
 import { DraftEditor } from '../input/editor/DraftEditor.tsx'
 import {
   focusDraftEditor, installDraftFilePicker, installDraftKeyboardDismissal, installDraftKeymap, installDraftWheel,
@@ -47,7 +48,7 @@ export const InputBar = memo(function InputBar({
   useSession, useInput, inputActions, keyboard, addFiles, removeAttachment, resolveDraftAttachments,
   retryFileUpload, registerFileIntake,
   toggleCommandMenu, stop, retry, t,
-  renderSlot, useBusyEnter, useFileUploads, useNotices, useLexicon, useMenuLauncher, useStopShortcut,
+  renderSlot, useBusyEnter, useFileUploads, useNotices, useLexicon, useMenuLauncher, useStopShortcut, useComposerActions,
   useAccess,
   useProjection, sessionId, variant, occurrence, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
@@ -57,6 +58,7 @@ export const InputBar = memo(function InputBar({
   const notice = useNotices(s => s)
   const busyEnter = useBusyEnter(s => s)
   const stopKeys = useStopShortcut(keys => keys)
+  const composerActions = useComposerActions(actions => actions)
   // A page whose access snapshot excludes prompting, stopping, or uploading to this Session is offered
   // no Send, no Stop, or no file intake rather than a disabled control. `useAccess` is undefined only
   // without a Session, where the bar is an inert placeholder with no keyboard, stop, or file intake.
@@ -373,26 +375,51 @@ export const InputBar = memo(function InputBar({
   // state keeps plain Send. A continuable child keeps Send primary and
   // exposes Stop independently, and so does a running session while a
   // message waits for the Host.
+  const extensionContext: ComposerExtensionContext = { sessionId, draft, empty, running }
+  // Plugin-provided primary actions own the seat only where nothing is in
+  // flight and the composer holds no draft: Stop, Send, and the built-in
+  // continue stay the composer's own gestures while they apply.
+  const extensionAction: ComposerPrimaryAction | undefined = !running && !disabled && empty
+    && input.phase === 'plain'
+    ? composerActions.find((action) => {
+      try {
+        return action.available(extensionContext)
+      } catch (error) {
+        console.error(`[ui-conversation] composer action "${action.id}" availability failed:`, error)
+        return false
+      }
+    })
+    : undefined
   const primaryStops = running && subagent === null && !sending && (empty || blocked !== undefined)
   const primaryRetries = !running && subagent === null && empty && retryableFailure !== undefined
     && !pendingHumanInput && historyOpen && !submissionPending && !disabled && input.queue.length === 0
     && input.phase === 'plain' && retry !== undefined
   // Disabled native buttons may omit mouseleave; their tooltip must close from state.
-  const primaryDisabled = primaryStops ? stopAction === undefined
-    : (!primaryRetries && empty) || disabled || machineBusy || uploadsPending
+  const primaryDisabled = extensionAction !== undefined
+    ? false
+    : primaryStops ? stopAction === undefined
+      : (!primaryRetries && empty) || disabled || machineBusy || uploadsPending
   const interruptible = running && (continuable || (sending && subagent === null))
   const primarySubmitMode = resolveSubmitMode(busyEnter, running, 'enter', steeringAvailable)
   const plainMessageDraft = !empty && input?.phase === 'plain' && !draft.trimStart().startsWith('/')
-  const primaryLabel = primaryStops
-    ? t('input.stop')
-    : sending
-      ? t('input.sending')
-      : primaryRetries
-        ? t('input.continue')
-        : running && steeringAvailable && !disabled && !uploadsPending && plainMessageDraft
-          ? t(primarySubmitMode === 'steer' ? 'input.send.steer' : 'input.send.queue')
-          : t('input.send')
+  const primaryLabel = ((): string => {
+    if (extensionAction !== undefined) return extensionAction.label()
+    if (primaryStops) return t('input.stop')
+    if (sending) return t('input.sending')
+    if (primaryRetries) return t('input.continue')
+    return running && steeringAvailable && !disabled && !uploadsPending && plainMessageDraft
+      ? t(primarySubmitMode === 'steer' ? 'input.send.steer' : 'input.send.queue')
+      : t('input.send')
+  })()
   const onPrimary = (): void => {
+    if (extensionAction !== undefined) {
+      try {
+        extensionAction.run(extensionContext)
+      } catch (error) {
+        console.error(`[ui-conversation] composer action "${extensionAction.id}" failed:`, error)
+      }
+      return
+    }
     if (primaryStops) {
       stopAction?.()
       return
@@ -566,12 +593,13 @@ export const InputBar = memo(function InputBar({
                   className={css.primary}
                   aria-label={primaryLabel}
                   aria-busy={sending}
+                  data-composer-extension={extensionAction === undefined ? undefined : extensionAction.id}
                   data-sending={sending ? '' : undefined}
                   disabled={primaryDisabled}
                   onMouseDown={keepFocus}
                   onClick={onPrimary}
                 >
-                  {primaryStops ? (
+                  {extensionAction !== undefined ? extensionAction.icon() : primaryStops ? (
                     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden>
                       <rect x="3" y="3" width="10" height="10" rx="3" fill="currentColor" />
                     </svg>

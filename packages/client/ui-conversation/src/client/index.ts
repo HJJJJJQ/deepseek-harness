@@ -36,6 +36,10 @@ export type {
   NodeReference, RenderEntry,
 } from './contract/groups.ts'
 export { ConversationController, UnsupportedImageMediaTypeError } from './service.ts'
+export { ComposerExtensions } from './input/extensions.ts'
+export type {
+  ComposerExtensionContext, ComposerKey, ComposerKeyHandler, ComposerPrimaryAction,
+} from './contract/composer-extensions.ts'
 export type { IConversation } from './service.ts'
 export type {
   ConversationContextReader, ConversationLocation,
@@ -112,6 +116,8 @@ declare module '@deepseek-ai/cordis' {
     conversation: import('./service.ts').IConversation
     /** Target-neutral Conversation registries and per-Session assembly. */
     uiConversation: import('./conversation/assembly.ts').UiConversation
+    /** Composer extension seats: plugin key handlers and empty-composer primary actions. */
+    composerExtensions: import('./input/extensions.ts').ComposerExtensions
   }
 }
 

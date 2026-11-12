@@ -98,6 +98,15 @@ export interface ComposerKeyboard {
   arbitrate(key: ArbitrateKey, composing: boolean): ArbitrateOutcome
   /** Space adjudication; true = the input applied a claim — caller preventDefaults. */
   space(): boolean
+  /**
+   * Offer one intercepted arrow to plugin key handlers, then to submitted-prompt
+   * recall (ArrowUp/ArrowDown on an empty or untouched recalled draft).
+   * @param key - the arrow that arrived.
+   * @param event - originating DOM event, when the engine supplied one.
+   * @returns true = consumed: the draft changed or a plugin claimed the key,
+   *   so the caller preventDefaults.
+   */
+  composerKey(key: 'up' | 'down', event: KeyboardEvent | null): boolean
   /** Dismiss the popupSelect shell (any interaction outside the box). */
   dismissPopup(): void
   /**

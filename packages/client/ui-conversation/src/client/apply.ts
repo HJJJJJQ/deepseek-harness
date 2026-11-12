@@ -33,6 +33,8 @@ import type { IConversation } from './service.ts'
 import { ComposerBlockRegistry } from './input/blocks.ts'
 import type { ComposerBlock } from './contract/composer-blocks.ts'
 import { InputHub } from './input/hub.ts'
+import { ComposerExtensions } from './input/extensions.ts'
+import type { ComposerPrimaryAction } from './contract/composer-extensions.ts'
 import { createComposerFileIntake } from './input/file-intake.ts'
 import { ComposerSubmissionPolicy } from './input/submission-policy.ts'
 import { queueDockEntry } from './queue/QueueDock.tsx'
@@ -91,6 +93,11 @@ const ABSENT_LEXICON = {
 }
 const ABSENT_MENU_LAUNCHER = {
   getSnapshot: (): string | null => null,
+  subscribe: () => () => {},
+}
+const EMPTY_COMPOSER_ACTIONS: readonly ComposerPrimaryAction[] = []
+const ABSENT_COMPOSER_ACTIONS = {
+  getSnapshot: (): readonly ComposerPrimaryAction[] => EMPTY_COMPOSER_ACTIONS,
   subscribe: () => () => {},
 }
 const EMPTY_FILE_UPLOADS: DraftFileUploads = {}
@@ -300,7 +307,8 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     }, 'ui-conversation: fixed stop reference')
   })
 
-  const inputHub = new InputHub(ctx, t)
+  const composerExtensions = new ComposerExtensions(ctx)
+  const inputHub = new InputHub(ctx, t, composerExtensions)
   const composerBlocks = new ComposerBlockRegistry()
 
   ctx.inject(['commandUi'], (scope) => {
@@ -495,6 +503,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
             notices: ABSENT_NOTICES,
             lexicon: ABSENT_LEXICON,
             menuLauncher: ABSENT_MENU_LAUNCHER,
+            composerActions: ABSENT_COMPOSER_ACTIONS,
           },
         }
       }
@@ -576,6 +585,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
           notices: shell.notices,
           lexicon: shell.lexicon,
           menuLauncher: inputTriggers?.launcher ?? ABSENT_MENU_LAUNCHER,
+          composerActions: composerExtensions.primaryActions,
         },
       }
     },

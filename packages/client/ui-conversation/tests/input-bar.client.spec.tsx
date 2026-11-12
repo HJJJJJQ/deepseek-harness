@@ -33,6 +33,7 @@ import { $replaceDetectSpanWithText, $selectDetectSpan } from '../src/client/inp
 import type {
   ComposerAttachment, ComposerAttachmentsOwnerProps, ComposerFileIntake, DraftFileUploads, InputActivityOwnerProps,
 } from '../src/client/contract/slots.ts'
+import type { ComposerPrimaryAction } from '../src/client/contract/composer-extensions.ts'
 import type { DraftAttachmentId } from '../src/client/contract/input.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
@@ -116,6 +117,8 @@ interface BenchOptions {
   commandMenuOpen?: boolean
   busyEnter?: 'queue' | 'steer'
   toggleCommandMenu?: (selection: { start: number; end: number }) => void
+  /** Plugin-registered primary actions for the empty, idle composer. */
+  composerActions?: readonly ComposerPrimaryAction[]
 }
 
 /** One pending queue row (the runtime snapshot shape, as the dock tests build it). */
@@ -162,6 +165,7 @@ function bench(over?: BenchOptions) {
       }
       : {}),
   })
+  shell.bindPromptHistory(SID)
   if (over?.draft !== undefined && over.draft !== '') shell.setDraft(over.draft)
   if (over?.attachments !== undefined) shell.addAttachments(over.attachments.map(attachment => attachment.id))
   const stop = vi.fn()
@@ -170,6 +174,7 @@ function bench(over?: BenchOptions) {
   const menuLauncher = createSnapshotStore<string | null>(over?.commandMenuOpen === true ? 'command' : null)
   const busyEnter = createSnapshotStore<'queue' | 'steer'>(over?.busyEnter ?? 'queue')
   const stopShortcut = createSnapshotStore<readonly string[]>(['Esc', 'Esc'])
+  const composerActions = createSnapshotStore<readonly ComposerPrimaryAction[]>(over?.composerActions ?? [])
   const slotCalls: { key: string; owner: unknown }[] = []
   const renderSlot = ((key: string, owner: object) => {
     slotCalls.push({ key, owner })
@@ -229,6 +234,7 @@ function bench(over?: BenchOptions) {
     useNotices: bindSnapshotSelector(shell.notices),
     useLexicon: bindSnapshotSelector(shell.lexicon),
     useMenuLauncher: bindSnapshotSelector(menuLauncher),
+    useComposerActions: bindSnapshotSelector(composerActions),
     stop,
     // Mirrors the real lookup chain (conversation namespace, then common).
     t: over?.t ?? makeTranslate(zh, commonZh),

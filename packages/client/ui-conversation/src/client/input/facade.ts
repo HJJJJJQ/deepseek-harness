@@ -25,6 +25,9 @@ import type {
 } from '../contract/draft-editor.ts'
 import type { InputSubmitMode, MessageSubmission, MessageSubmissionState } from '../contract/composer-submission.ts'
 import { serializeDraftPrompt } from './prompt.ts'
+import { PromptHistory, readPromptHistory, writePromptHistory, type PromptHistoryDirection } from './prompt-history.ts'
+import type { ComposerExtensions } from './extensions.ts'
+import type { ComposerExtensionContext } from '../contract/composer-extensions.ts'
 import { SubmitMachine } from './machine.ts'
 import { resolveDraftInput, snapshotDraft } from '../draft.ts'
 import { DraftEditorRuntime } from './editor/runtime.ts'
@@ -53,6 +56,8 @@ export interface SessionInputDeps {
   popup?: (() => PopupDismissFace | undefined) | undefined
   /** Agent Inbox projection; its next-turn list is overlaid onto InputState.queue. */
   inbox?: ObservableSnapshot<InboxState | undefined> | undefined
+  /** Root composer-extension registry; absent when no client plugin seat is composed. */
+  extensions?: (() => ComposerExtensions | undefined) | undefined
   /**
    * Steer every still-pending queued message into the running turn, in FIFO
    * order (the empty-draft accelerated-Enter gesture); absent = unsupported.
@@ -173,6 +178,10 @@ export class SessionInputShell implements SessionInput {
   private draftSnapshotCache: { revision: number; value: DraftSnapshot } | undefined
   private attachmentIds: readonly DraftAttachmentId[] = []
   private disposed = false
+  /** Submitted prompts backing ArrowUp recall; undefined until the hub binds the Session. */
+  private promptHistory: PromptHistory | undefined
+  /** Session whose prompt trail is bound (extension context identity). */
+  private promptHistorySession: Parameters<typeof readPromptHistory>[0] | undefined
   /** Conversation store writer for the current semantic document. */
   private persistDraft: ((draft: DraftSnapshot) => void) | undefined
   /** A restored draft's command token waiting for the trigger pipeline, with the revision its restore produced. */
@@ -234,6 +243,61 @@ export class SessionInputShell implements SessionInput {
     if (draft.command === undefined) return
     this.pendingCommand = { token: draft.command.token, rev: this.rev }
     this.restoreCommand()
+  }
+
+  /**
+   * Load the Session's persisted prompt trail for ArrowUp recall.
+   * @param sessionId - Session whose trail is addressed.
+   */
+  bindPromptHistory(sessionId: Parameters<typeof readPromptHistory>[0]): void {
+    this.promptHistorySession = sessionId
+    this.promptHistory = new PromptHistory(readPromptHistory(sessionId), (prompts) => {
+      writePromptHistory(sessionId, prompts)
+    })
+  }
+
+  /**
+   * Recall one submitted prompt into the draft.
+   * @param direction - up walks older, down walks back toward the newest.
+   * @returns whether the draft was replaced (the keystroke is consumed).
+   */
+  private historyStep(direction: PromptHistoryDirection): boolean {
+    const next = this.promptHistory?.step(direction, this.projection.clipboardText)
+    if (next === undefined) return false
+    this.setDraft(next)
+    return true
+  }
+
+  /**
+   * Composer-owned arrow handling: plugin key handlers first (they may claim
+   * the gesture), then submitted-prompt recall.
+   * @param key - the intercepted arrow.
+   * @param event - originating DOM event, when the engine supplied one.
+   * @returns true = consumed.
+   */
+  composerKey(key: 'up' | 'down', event: KeyboardEvent | null): boolean {
+    const context: ComposerExtensionContext = {
+      sessionId: this.promptHistorySession,
+      draft: this.projection.clipboardText,
+      empty: this.projection.clipboardText.trim() === '' && this.attachmentIds.length === 0,
+      running: (() => {
+        const submissionState = this.deps.submissionState
+        if (submissionState === undefined) return false
+        try {
+          return submissionState().running
+        } catch (_error: unknown) {
+          return false
+        }
+      })(),
+    }
+    for (const handler of this.deps.extensions?.()?.keyHandlersFor(key) ?? []) {
+      try {
+        if (handler.run(context, key, event)) return true
+      } catch (error) {
+        console.error(`[ui-conversation] composer key handler "${handler.id}" failed:`, error)
+      }
+    }
+    return this.historyStep(key)
   }
 
   /**
@@ -401,6 +465,7 @@ export class SessionInputShell implements SessionInput {
    */
   submit(mode: InputSubmitMode = 'queue', source?: 'click' | 'enter', allowEmpty = false): void {
     if (this.disposed) return
+    this.promptHistory?.record(this.projection.clipboardText)
     const timestamp = Date.now()
     let state: MessageSubmissionState | undefined
     if (this.snapshot.phase === 'plain' && (this.snapshot.draft.trim() !== '' || this.attachmentIds.length > 0)) {

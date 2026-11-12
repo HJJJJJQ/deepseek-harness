@@ -27,6 +27,7 @@ import type { PopupDismissFace } from './facade.ts'
 import { SessionInputShell } from './facade.ts'
 import { reportMessageSubmission } from './submission-analytics.ts'
 import { readConversationDraft } from '../stores.ts'
+import type { ComposerExtensions } from './extensions.ts'
 
 /** Structural command face for per-session popup resolution. */
 interface CommandFace {
@@ -65,6 +66,7 @@ export class InputHub implements SessionInputResolver {
   constructor(
     private readonly rootCtx: Context,
     private readonly t: TranslateNS<'conversation'>,
+    private readonly composerExtensions?: ComposerExtensions,
   ) {}
 
   /**
@@ -102,6 +104,7 @@ export class InputHub implements SessionInputResolver {
     const { session, ctx: actx } = binding
     const shell = new SessionInputShell({
       actx,
+      extensions: () => this.composerExtensions,
       submissionState: () => {
         const state = session.getSnapshot()
         const model = session.projections.faceOf('modelSelection').getSnapshot() as ModelSelectionProjection | undefined
@@ -181,6 +184,7 @@ export class InputHub implements SessionInputResolver {
       }, 'conversation.input: reference catalogs')
     })
     shell.setDraft(readConversationDraft(binding.sessionId))
+    shell.bindPromptHistory(binding.sessionId)
     return shell
   }
 
