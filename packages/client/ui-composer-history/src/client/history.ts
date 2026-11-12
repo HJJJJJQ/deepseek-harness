@@ -3,6 +3,9 @@
  * sent, newest last, recalled with ArrowUp/ArrowDown while the composer is
  * empty (or still showing an untouched recall). Storage is per Session so each
  * conversation keeps its own trail, and a reload keeps the trail alive.
+ *
+ * The plugin owns the trail; the composer only reports submissions and offers
+ * the recall keystroke through its extension seats.
  */
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 

@@ -38,7 +38,8 @@ export type {
 export { ConversationController, UnsupportedImageMediaTypeError } from './service.ts'
 export { ComposerExtensions } from './input/extensions.ts'
 export type {
-  ComposerExtensionContext, ComposerKey, ComposerKeyHandler, ComposerPrimaryAction,
+  ComposerExtensionContext, ComposerKey, ComposerKeyHandler, ComposerPrimaryAction, ComposerSubmission,
+  ComposerSubmissionListener,
 } from './contract/composer-extensions.ts'
 export type { IConversation } from './service.ts'
 export type {

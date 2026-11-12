@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Eingabeverlauf",
+    "description": "Ruft bereits gesendete Eingaben ab, wenn das Eingabefeld leer ist."
+  }
+}

@@ -165,7 +165,6 @@ function bench(over?: BenchOptions) {
       }
       : {}),
   })
-  shell.bindPromptHistory(SID)
   if (over?.draft !== undefined && over.draft !== '') shell.setDraft(over.draft)
   if (over?.attachments !== undefined) shell.addAttachments(over.attachments.map(attachment => attachment.id))
   const stop = vi.fn()

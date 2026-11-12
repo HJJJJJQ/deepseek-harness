@@ -19,6 +19,7 @@ Desktop product events use the optional [product analytics service](../product-a
 - [Sent user text](#sent-user-text)
 - [Shell and standard props](#shell-and-standard-props)
 - [Temporary composer entries](#temporary-composer-entries)
+- [Composer extension seats](#composer-extensions)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
 - [Dev Note](#dev-note)
@@ -198,6 +199,17 @@ The selector must be a pure function of the owner currency. Its non-null return 
 
 Session title context gestures use the shared [context menu](../ui-context-menu/README.md) with the clicked breadcrumb’s Session. The reusable image gallery receives `getTriggerProps` from its Factory’s injected `useContextMenu` hook.
 
+<a id="composer-extensions"></a>
+## Composer extension seats
+
+`ctx.composerExtensions` is the plugin-facing handle for gestures the composer would otherwise hard-code. Each registration returns its own disposer, so a plugin fiber releases its contributions with itself.
+
+- `registerKeyHandler({ id, keys, priority?, run })` — claim an `up`/`down`/`enter`/`escape`/`tab`/`tabBack` gesture before the composer's own caret behavior. Handlers run by descending priority (registration order breaks ties) and the first `run` returning `true` owns the keystroke; `run` receives `{ sessionId, draft, empty, running }`. A handler that throws is logged and treated as uninterested, so one plugin cannot break input.
+- `registerPrimaryAction({ id, priority?, available, label, icon, run })` — offer an alternative primary button. It is consulted only while the composer is empty, idle, unlocked, and in the plain phase; Stop, Send, and the built-in continuing action keep that seat while they apply. The first available action wins.
+- `registerSubmissionListener({ id, priority?, receive })` — hear every composer submission as `{ sessionId, text }` before the message is dispatched. A throwing listener cannot fail the send it observed.
+
+[ui-composer-history](../ui-composer-history/README.md) is the reference consumer: its key handler claims the arrows and its submission listener records the trail, without any composer change.
+
 <a id="model-experience"></a>
 ## Model Experience
 
@@ -221,7 +233,7 @@ Serialization of the empty retry message depends on the adapter. Prefix reuse de
 
 - **Only registered targets can render** — the shell deliberately has no implicit fallback target beyond the registered `chat` preference.
 - **Factory occurrences inherit their render-position Session** — `conversation.content` does not accept an independently addressed Session; that requires a separate Session-provider capability.
-- **Manual continuation uses a fixed product allowlist** — the supported failure codes are independent of the provider's configurable `retryableCodes`; changing automatic retry policy does not expand or reduce this action. `STREAM_CLOSED` permits an explicit new user turn even when the default policy does not retry it. That code can also identify a protocol violation, so another request is not guaranteed to recover.
+- **Manual continuation uses a fixed product allowlist** — the supported failure codes are independent of the provider's configurable `retryableCodes`; changing automatic retry policy does not expand or reduce this action. `STREAM_CLOSED` permits an explicit new user turn even when the default policy does not retry it. That code can also identify a protocol violation, so another request is not guaranteed to recover. A turn the human stopped (`aborted` with a `user` cause) is continuable regardless of that list; `parent`, `hook`, `disposed`, and `legacy` closers are not.
 - **Composer backdrop blur is verified only in Chromium** — with `will-change: transform` on the docked composer, descendant `backdrop-filter` still samples the transcript in Chromium; WebKit behavior has not been verified.
 - **Document file drops are not routed** — every mounted attachment view handles a document-level file drop, so with a continuable subagent chat open in the right Sidebar one drop adds the files to both composers; only window pastes pass through the single paste route.
 - **A failing Definition costs a full replay per publication** — after an incremental flush fails, the assembler replays the complete loaded window to keep the views correct. A Definition that fails on every update therefore replays the whole window on each publication until its owner fixes it ([window update paths](../../../docs/subsystems/conversation.md#window-update-paths)).

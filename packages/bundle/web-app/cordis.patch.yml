@@ -349,6 +349,9 @@
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'
 
+    - id: ui-composer-history
+      name: '@deepseek-ai/dsh-client-ui-composer-history'
+
     - id: ui-approval
       name: '@deepseek-ai/dsh-client-ui-approval'
 

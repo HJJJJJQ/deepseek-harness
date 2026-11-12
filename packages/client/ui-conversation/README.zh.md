@@ -19,6 +19,7 @@ kind: "package-reference"
 - [已发送用户文本](#sent-user-text)
 - [Shell 与标准 props](#shell-and-standard-props)
 - [临时 composer entry](#temporary-composer-entries)
+- [输入框扩展座位](#composer-extensions)
 - [模型体验](#model-experience)
 - [已知限制与暂缓事项](#known-limitations-and-deferred-work)
 - [开发备注](#dev-note)
@@ -197,6 +198,17 @@ selector 必须是 owner currency 的纯函数。非 null 返回值作为 `match
 `conversation.input.activity` 在模型选择器与发送按钮之间承载一个控件。其 `onActiveChange` 回调将控件展开至整条工具栏并隐藏普通辅助控件和上下文用量按钮，同时保留编辑器与提交按钮。关闭活动后恢复这些控件，上下文详情保持关闭。首页输入框下方没有内容时，该区域保持收起。占用者在卸载时释放展开状态，并拥有活动专属反馈。
 
 会话标题右键使用共享[右键菜单](../ui-context-menu/README.zh.md)，目标是被点击面包屑所属会话。可复用图片库从其 Factory 注入的 `useContextMenu` hook 获取 `getTriggerProps`。
+
+<a id="composer-extensions"></a>
+## 输入框扩展座位
+
+`ctx.composerExtensions` 是给插件用的手势入口，用来接管输入框本来写死的行为。每个注册都返回自己的注销函数，插件 fiber 释放时一并移除。
+
+- `registerKeyHandler({ id, keys, priority?, run })` — 在输入框自己的光标处理之前认领 `up`/`down`/`enter`/`escape`/`tab`/`tabBack` 手势。处理器按 priority 降序执行（相同则按注册顺序），第一个 `run` 返回 `true` 的拿走这次按键；`run` 拿到 `{ sessionId, draft, empty, running }`。抛异常的处理器会被记录并当作“不感兴趣”，单个插件不会弄坏输入。
+- `registerPrimaryAction({ id, priority?, available, label, icon, run })` — 提供备选主按钮。只在输入框为空、空闲、未锁定且处于 plain 阶段时被咨询；Stop、Send 和内置的继续动作生效时仍占据该位置。第一个 available 的动作获胜。
+- `registerSubmissionListener({ id, priority?, receive })` — 在消息派发前收到每一次提交 `{ sessionId, text }`。抛异常的监听器不会让这次发送失败。
+
+[ui-composer-history](../ui-composer-history/README.zh.md) 是参考实现：按键处理器认领方向键、提交监听器记录历史，输入框本身没有任何改动。
 
 <a id="model-experience"></a>
 ## 模型体验

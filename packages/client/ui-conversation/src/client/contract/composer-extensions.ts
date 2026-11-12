@@ -12,6 +12,9 @@
  *   composer is empty and idle, which is where continuation, regeneration, or
  *   any "start this for me" action belongs. Stop and ordinary Send keep that
  *   seat while a turn runs or a draft exists.
+ * - {@link ComposerSubmissionListener} hears every submitted prompt, which is
+ *   what turns a key handler into a prompt history without the composer
+ *   knowing the trail exists.
  *
  * Handlers run in descending priority, registration order breaking ties; the
  * first one that answers owns the gesture. A throwing handler is treated as
@@ -50,6 +53,24 @@ export interface ComposerKeyHandler {
    * @returns true = consumed (the composer preventDefaults and stops).
    */
   run(context: ComposerExtensionContext, key: ComposerKey, event: KeyboardEvent | null): boolean
+}
+
+/** One submitted prompt, as the composer reports it to plugins. */
+export interface ComposerSubmission {
+  /** Addressed Session, absent in the inert (no-session) composer. */
+  readonly sessionId: SessionId | undefined
+  /** The draft text the submission carried (empty for an empty retry). */
+  readonly text: string
+}
+
+/** One plugin observer of submitted prompts (history, macros, bookkeeping). */
+export interface ComposerSubmissionListener {
+  /** Stable identity for diagnostics and de-duplication. */
+  readonly id: string
+  /** Higher is notified first (default 0). */
+  readonly priority?: number | undefined
+  /** Called for every composer submission the composer admits. */
+  receive(submission: ComposerSubmission): void
 }
 
 /** One plugin-provided primary button for an empty, idle composer. */

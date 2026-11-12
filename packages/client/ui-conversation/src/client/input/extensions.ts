@@ -7,7 +7,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { Service } from '@deepseek-ai/cordis'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {
-  ComposerExtensionContext, ComposerKey, ComposerKeyHandler, ComposerPrimaryAction,
+  ComposerExtensionContext, ComposerKey, ComposerKeyHandler, ComposerPrimaryAction, ComposerSubmission,
+  ComposerSubmissionListener,
 } from '../contract/composer-extensions.ts'
 
 /** One registration plus its tie-breaking order. */
@@ -32,6 +33,7 @@ function byPriority<T extends { readonly priority?: number | undefined }>(
 export class ComposerExtensions extends Service {
   private readonly keys: Registered<ComposerKeyHandler>[] = []
   private readonly actions: Registered<ComposerPrimaryAction>[] = []
+  private readonly submissions: Registered<ComposerSubmissionListener>[] = []
   private order = 0
 
   /** Live primary actions, already ordered by priority. */
@@ -45,6 +47,7 @@ export class ComposerExtensions extends Service {
     ctx.effect(() => () => {
       this.keys.length = 0
       this.actions.length = 0
+      this.submissions.length = 0
       this.publishActions()
     }, 'composerExtensions: release registrations')
   }
@@ -61,6 +64,36 @@ export class ComposerExtensions extends Service {
     return () => {
       const index = this.keys.indexOf(registered)
       if (index >= 0) this.keys.splice(index, 1)
+    }
+  }
+
+  /**
+   * Observe every submitted prompt.
+   * @param listener - the observer to notify.
+   * @returns the unregister disposer.
+   */
+  registerSubmissionListener(listener: ComposerSubmissionListener): () => void {
+    const registered: Registered<ComposerSubmissionListener> = { entry: listener, order: this.order++ }
+    this.submissions.push(registered)
+    this.submissions.sort(byPriority)
+    return () => {
+      const index = this.submissions.indexOf(registered)
+      if (index >= 0) this.submissions.splice(index, 1)
+    }
+  }
+
+  /**
+   * Report one submission to every listener; a throwing listener cannot fail
+   * the send it observed.
+   * @param submission - the submitted session and text.
+   */
+  notifySubmission(submission: ComposerSubmission): void {
+    for (const { entry } of [...this.submissions]) {
+      try {
+        entry.receive(submission)
+      } catch (error) {
+        console.error(`[ui-conversation] composer submission listener "${entry.id}" failed:`, error)
+      }
     }
   }
 

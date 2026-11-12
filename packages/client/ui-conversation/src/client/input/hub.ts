@@ -104,6 +104,7 @@ export class InputHub implements SessionInputResolver {
     const { session, ctx: actx } = binding
     const shell = new SessionInputShell({
       actx,
+      sessionId: binding.sessionId,
       extensions: () => this.composerExtensions,
       submissionState: () => {
         const state = session.getSnapshot()
@@ -184,7 +185,6 @@ export class InputHub implements SessionInputResolver {
       }, 'conversation.input: reference catalogs')
     })
     shell.setDraft(readConversationDraft(binding.sessionId))
-    shell.bindPromptHistory(binding.sessionId)
     return shell
   }
 

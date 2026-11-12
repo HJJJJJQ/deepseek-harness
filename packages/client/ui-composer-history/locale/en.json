@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Composer prompt history",
+    "description": "Recalls prompts this Session already sent when the composer is empty."
+  }
+}
